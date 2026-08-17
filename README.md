@@ -2,55 +2,50 @@
 
 AI-based restoration of degraded grayscale semiconductor inspection images.
 
+## Final Run 4 model
+
+- Architecture: Residual U-Net
+- Input: 128x128 grayscale `.npy`
+- Output: 256x256 restored `.npy`
+- Best checkpoint: epoch 11
+- Validation PSNR: **28.3825 dB**
+- Validation SSIM: **0.7570**
+
 ## Problem
 
-Restore paired degraded low-resolution images to clean full-resolution ground truth images. The target degradation space includes speckle noise, Gaussian noise/blur-like degradation, spatial downsampling, and combinations in varying order.
-
-## Current experimental result
-
-Strongest measured validation result so far: **Edge-aware Residual U-Net — 27.946 dB PSNR, 0.74879 SSIM**. These are development/validation results, not final KLA test-set scores.
+Restore paired degraded low-resolution semiconductor inspection images toward clean high-resolution ground truth. The project investigates Gaussian noise, speckle noise, spatial downsampling, and combinations of these degradations.
 
 ## Architecture
 
 ```text
-Degraded LR image
-       |
-       v
-2x bicubic reconstruction
-       |
-       v
-Residual U-Net encoder/decoder
-       |
-       v
-Learned residual
-       |
-       +----> add to bicubic reconstruction
-                    |
-                    v
-              Restored HR image
+128x128 degraded image
+        |
+        v
+2x bicubic baseline
+        |
+        v
+Residual U-Net
+  encoder / bottleneck / decoder
+        |
+        v
+learned residual
+        |
+        v
+baseline + residual
+        |
+        v
+256x256 restored image
 ```
 
-Restoration formulation: `output = bicubic(input) + learned_residual`.
+## Data format
 
-## Data
+The evaluator expects `.npy` grayscale arrays:
 
-Images are grayscale. Ground truth images are 256x256 or 512x512; degraded inputs can be 128x128 or 256x256. Degraded intensities can lie outside `[0,1]`, so the implementation must not blindly clip the input before restoration.
+- Input shape: `(128, 128)`
+- Output shape: `(256, 256)`
+- Input values are kept as provided; the evaluator does not blindly normalize or clip the input before restoration.
 
 Do **not** commit the competition dataset to this repository.
-
-## Repository structure
-
-```text
-├── README.md
-├── train.py
-├── evaluate.py
-├── inference.py
-├── requirements.txt
-├── weights/
-│   └── final_model.pth        # add after final training
-└── restored_outputs/
-    └── README.md              # add actual outputs after inference
-```
 
 ## Installation
 
@@ -60,43 +55,36 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Inference
+## Evaluation / inference
 
 ```bash
-python inference.py --input_dir /path/to/test_images --output_dir /path/to/restored_outputs --weights weights/final_model.pth
+python evaluation.py --input_dir /path/to/test_npy --output_dir /path/to/restored_outputs --weights weights/final_model.pth
 ```
 
-No source-code editing should be required by the evaluator.
-
-## Evaluation
+Equivalent entry point:
 
 ```bash
-python evaluate.py --input_dir /path/to/test_images --output_dir /path/to/restored_outputs --weights weights/final_model.pth
+python inference.py --input_dir /path/to/test_npy --output_dir /path/to/restored_outputs --weights weights/final_model.pth
 ```
 
-When paired ground truth is available, the evaluator reports PSNR/SSIM. LPIPS and final benchmark timing must be added before submission.
+No source-code editing is required.
+
+## Verification completed
+
+The verified Run 4 pipeline was executed on **400 real 128x128 test inputs** with a Tesla T4. All 400 outputs were generated successfully as 256x256 `.npy` arrays.
+
+Additional single-sample robustness experiments were performed for Gaussian noise, speckle noise, combined degradations, and all six permutations of Gaussian, speckle, and downsampling. These are robustness experiments, not official test-set scores.
 
 ## Training
 
-```bash
-python train.py --data_dir /path/to/paired_dataset --output_dir checkpoints
+The original training work used paired `.npy` data with 2560 training samples and 640 validation samples. The competition dataset should not be committed to the repository.
+
+## Weights
+
+Place the verified Run 4 checkpoint at:
+
+```text
+weights/final_model.pth
 ```
 
-The intended final training uses paired degraded/ground-truth data, residual reconstruction, and edge-aware loss.
-
-## Submission status
-
-The final trained Edge-aware Residual U-Net weights are **not yet persisted in this repository**. The previous Colab runtime held the trained weights only in RAM and was disconnected. The Drive file `best_model.pth` was verified to contain the earlier Simple CNN (`conv1`, `conv2`, `conv3`), not the U-Net.
-
-Therefore `weights/final_model.pth` must only be added after the final U-Net is retrained and saved. This prevents submitting an incorrect checkpoint.
-
-## Final checklist
-
-- [ ] Train final U-Net and save `weights/final_model.pth`
-- [ ] Verify checkpoint loads in a fresh process
-- [ ] Run inference without source edits
-- [ ] Add actual restored test outputs
-- [ ] Measure PSNR, SSIM and LPIPS
-- [ ] Measure inference time per image
-- [ ] Test on a clean machine
-- [ ] Freeze exact dependencies in `requirements.txt`
+The checkpoint used during development was verified to load into the exact `model.py` architecture and produce `(1, 1, 256, 256)` from `(1, 1, 128, 128)`.
